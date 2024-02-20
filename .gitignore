@@ -1,0 +1,8 @@
+src/data/secret.bin
+__pycache__/
+src/data/settings.json
+src/data/usernamecache.json
+src/data/players/
+src/main.spec
+src/build/
+src/dist/
