@@ -1,18 +1,49 @@
-import ftplib
 import os
 import io
 import json
+import ftplib
+import argparse
+import mcstatus
 from nbt import nbt
 import PySimpleGUI as sg
 
 
 subdirectory: str = os.sep
+
+if not os.path.exists(f'.{subdirectory}data{subdirectory}settings.json'):
+    settings: dict = {
+        "username": "admin",
+        "password": "password",
+        "ip": "localhost",
+        "port": 21
+    }
+
+    if not os.path.exists(f'.{subdirectory}data'):
+        os.mkdir(f'.{subdirectory}data')
+
+    json.dump(settings, open(f'.{subdirectory}data{subdirectory}settings.json', 'w'))
+    print("Settings file not found. Creating new settings file with default values.")
+    print("Please edit the settings file and restart the program.")
+    exit()
+
+if not os.path.exists(f'.{subdirectory}data{subdirectory}players'):
+    os.mkdir(f'.{subdirectory}data{subdirectory}players')
+
 settings: dict = json.load(open(f'.{subdirectory}data{subdirectory}settings.json', 'r'))
 
 ip: str = settings.get('ip')
 port: int = settings.get('port')
 username: str = settings.get('username')
 password: str = settings.get('password')
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Offline Minecraft Save Editor")
+    parser.add_argument("-i", "--ip", help="The IP of the server", type=str, required=False)
+    parser.add_argument("-p", "--port", help="The port of the server", type=int, required=False)
+    parser.add_argument("-u", "--username", help="The username for server login", type=str, required=False)
+    parser.add_argument("-pw", "--password", help="The password for server login", type=str, required=False)
+    return parser.parse_args()
 
 
 def get_player_info(uuid: str) -> dict:
@@ -156,7 +187,8 @@ def set_inventory(uuid: str, inventory: list) -> None:
     player_file.write_file(f'.{subdirectory}data{subdirectory}players{subdirectory}{uuid}.dat')
 
 
-def gui(users: list, uuids: list, server: ftplib.FTP) -> None:
+def gui(users: list, uuids: list, server: ftplib.FTP, properties: list) -> None:
+    global subdirectory, ip, port
     """
     The GUI for the application.
 
@@ -166,7 +198,27 @@ def gui(users: list, uuids: list, server: ftplib.FTP) -> None:
     :return: None
     """
 
+    server_info: dict = {}
+    for line in properties:
+        if 'query.port' in line:
+            server_info['port'] = int(line.split('=')[1])
+        
+        if 'level-name' in line:
+            server_info['world'] = line.split('=')[1]
+    
+
+    minecraft_server = mcstatus.JavaServer.lookup(ip, port)
+
+    online_players: int = 0
+    max_players: int = 0
+
+    if minecraft_server is not None:
+        online_players: int = minecraft_server.status().players.online
+        max_players: int = minecraft_server.status().players.max
+    
+        
     default_layout = [
+        [sg.Text("Server Info:"), sg.Text(f'Players Online: {online_players}/{max_players}', key='_PLAYER_COUNT_'), sg.Text(f"Port: {server_info['port']}"), sg.Text(f"World Name: {server_info['world']}")],
         [sg.Text("User:"), sg.Combo(users, default_value='SELECT USER', key='_USER_INPUT_', enable_events=True), sg.Button("save"), sg.Button("upload")],
         [sg.Text("Health:"), sg.Input(key='_HEALTH_', size=(20, 1)), sg.Text("Hunger:"), sg.Input(key='_HUNGER_', size=(20, 1)), sg.Text("Dimension:"), sg.Input(key='_DIMENSION_', size=(20, 1)), sg.Text("Gamemode:"), sg.Input(key='_GAMEMODE_', size=(2, 1))],
         [sg.Text("X:"), sg.Input(key='_X_', size=(20, 1)), sg.Text("Y:"), sg.Input(key='_Y_', size=(20, 1)), sg.Text("Z:"), sg.Input(key='_Z_', size=(20, 1))],
@@ -204,7 +256,7 @@ def gui(users: list, uuids: list, server: ftplib.FTP) -> None:
             
                 print(f"Retrieving player data for {current_player}...")
                 try:
-                    server.retrbinary(f'RETR /world/playerdata/{current_player}.dat', open(f'data/players/{current_player}.dat', 'wb').write)
+                    server.retrbinary(f'RETR /world/playerdata/{current_player}.dat', open(f'data{subdirectory}players{subdirectory}{current_player}.dat', 'wb').write)
                     print("Player data retrieved successfully.")
                 except Exception as e:
                     print(f"Failed to retrieve player data: {str(e)}")
@@ -238,6 +290,16 @@ def gui(users: list, uuids: list, server: ftplib.FTP) -> None:
                         window[f'_COUNT_{item["slot"]}_'].update(value=item['count'])
                     except:
                         print(item, item["slot"])
+                
+                try:
+                    minecraft_server = mcstatus.JavaServer.lookup(ip, port)
+                    online_players: int = minecraft_server.status().players.online
+                    max_players: int = minecraft_server.status().players.max
+                except:
+                    online_players: int = 0
+                    max_players: int = 0
+                
+                window['_PLAYER_COUNT_'].update(value=f'Players Online: {online_players}/{max_players}')
 
                 window.refresh()
             
@@ -268,7 +330,7 @@ def gui(users: list, uuids: list, server: ftplib.FTP) -> None:
 
                 print(f"Uploading player data for {current_player}...")
                 try:
-                    server.storbinary(f"STOR /world/playerdata/{current_player}.dat", open(f'data/players/{current_player}.dat', 'rb'))
+                    server.storbinary(f"STOR /world/playerdata/{current_player}.dat", open(f'data{subdirectory}players{subdirectory}{current_player}.dat', 'rb'))
                     print("Player data uploaded successfully.")
                 except Exception as e:
                     print(f"Failed to upload player data: {str(e)}")
@@ -294,22 +356,46 @@ def main() -> None:
             break
         except:
             print('FAILED TO LOGIN!')
-            break
     
-    data = io.BytesIO()
-    server.retrbinary('RETR usernamecache.json', data.write)
+    usercache = io.BytesIO()
+    properties = io.BytesIO()
+    ops = io.BytesIO()
 
-    usercache_data = data.getvalue().decode('utf-8')
+    server.retrbinary('RETR usernamecache.json', usercache.write)
+    server.retrbinary('RETR server.properties', properties.write)
+    server.retrbinary('RETR ops.json', ops.write)
+
+    usercache_data = usercache.getvalue().decode('utf-8')
     usercache_data = usercache_data.replace('[', '{')
     usercache_data = usercache_data.replace(']', '}')
 
     usercache_data = json.loads(usercache_data)
 
+    properties_data = properties.getvalue().decode('utf-8')
+    properties_data = properties_data.split('\n')
+
+    ops_data = ops.getvalue().decode('utf-8')
+    ops_data = ops_data.replace('[', '{')
+    ops_data = ops_data.replace(']', '}')
+
+    ops_data = json.loads(ops_data)
+
     uuids: list = list(usercache_data.keys())
     user_list: list = list(usercache_data.values())
 
-    gui(user_list, uuids, server)
+    gui(user_list, uuids, server, properties_data)
 
 
 if __name__ == '__main__':
+    args = parse_args()
+
+    if args.ip:
+        ip = args.ip
+    if args.port:
+        port = args.port
+    if args.username:
+        username = args.username
+    if args.password:
+        password = args.password
+
     main()
