@@ -291,13 +291,14 @@ def gui(users: list, uuids: list, server: ftplib.FTP, properties: list) -> None:
                     except:
                         print(item, item["slot"])
                 
-                try:
-                    minecraft_server = mcstatus.JavaServer.lookup(ip, port)
+                minecraft_server = mcstatus.JavaServer.lookup(ip, port)
+
+                online_players: int = 0
+                max_players: int = 0
+
+                if minecraft_server is not None:
                     online_players: int = minecraft_server.status().players.online
                     max_players: int = minecraft_server.status().players.max
-                except:
-                    online_players: int = 0
-                    max_players: int = 0
                 
                 window['_PLAYER_COUNT_'].update(value=f'Players Online: {online_players}/{max_players}')
 
@@ -339,6 +340,21 @@ def gui(users: list, uuids: list, server: ftplib.FTP, properties: list) -> None:
     window.close()
 
 
+def get_file(server: ftplib.FTP, filename: str) -> str:
+    """
+    Get a file from the server.
+    
+    :param server:
+    :param filename:
+    :return: str
+    """
+
+    file = io.BytesIO()
+    server.retrbinary(f'RETR {filename}', file.write)
+
+    return file.getvalue().decode('utf-8')
+
+
 def main() -> None:
     """
     The main function of the application.
@@ -356,25 +372,17 @@ def main() -> None:
             break
         except:
             print('FAILED TO LOGIN!')
-    
-    usercache = io.BytesIO()
-    properties = io.BytesIO()
-    ops = io.BytesIO()
 
-    server.retrbinary('RETR usernamecache.json', usercache.write)
-    server.retrbinary('RETR server.properties', properties.write)
-    server.retrbinary('RETR ops.json', ops.write)
-
-    usercache_data = usercache.getvalue().decode('utf-8')
+    usercache_data = get_file(server, 'usernamecache.json')
     usercache_data = usercache_data.replace('[', '{')
     usercache_data = usercache_data.replace(']', '}')
 
     usercache_data = json.loads(usercache_data)
 
-    properties_data = properties.getvalue().decode('utf-8')
+    properties_data = get_file(server, 'server.properties')
     properties_data = properties_data.split('\n')
 
-    ops_data = ops.getvalue().decode('utf-8')
+    ops_data = get_file(server, 'ops.json')
     ops_data = ops_data.replace('[', '{')
     ops_data = ops_data.replace(']', '}')
 
