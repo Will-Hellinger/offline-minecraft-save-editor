@@ -1,60 +1,23 @@
 import os
 import io
+import sys
 import json
 import ftplib
+import requests
 import argparse
 import mcstatus
 from nbt import nbt
 import PySimpleGUI as sg
 
 
-subdirectory: str = os.sep
-
-if not os.path.exists(f'.{subdirectory}data{subdirectory}settings.json'):
-    settings: dict = {
-        "username": "admin",
-        "password": "password",
-        "ip": "localhost",
-        "port": 21
-    }
-
-    if not os.path.exists(f'.{subdirectory}data'):
-        os.mkdir(f'.{subdirectory}data')
-
-    json.dump(settings, open(f'.{subdirectory}data{subdirectory}settings.json', 'w'))
-    print("Settings file not found. Creating new settings file with default values.")
-    print("Please edit the settings file and restart the program.")
-    exit()
-
-if not os.path.exists(f'.{subdirectory}data{subdirectory}players'):
-    os.mkdir(f'.{subdirectory}data{subdirectory}players')
-
-settings: dict = json.load(open(f'.{subdirectory}data{subdirectory}settings.json', 'r'))
-
-ip: str = settings.get('ip')
-port: int = settings.get('port')
-username: str = settings.get('username')
-password: str = settings.get('password')
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Offline Minecraft Save Editor")
-    parser.add_argument("-i", "--ip", help="The IP of the server", type=str, required=False)
-    parser.add_argument("-p", "--port", help="The port of the server", type=int, required=False)
-    parser.add_argument("-u", "--username", help="The username for server login", type=str, required=False)
-    parser.add_argument("-pw", "--password", help="The password for server login", type=str, required=False)
-    return parser.parse_args()
-
-
-def get_player_info(uuid: str) -> dict:
+def get_player_info(player_file: nbt.NBTFile) -> dict:
     """
     Get the health, hunger, and dimension of a player.
     
-    :param uuid:
-    :return: dict
+    :param player_file: The player file
+    :return dict: The player information
     """
 
-    player_file = nbt.NBTFile(f'.{subdirectory}data{subdirectory}players{subdirectory}{uuid}.dat', "rb")
     player_info: dict = {}
 
     player_info['health'] = player_file['Health'].value
@@ -65,34 +28,31 @@ def get_player_info(uuid: str) -> dict:
     return player_info
 
 
-def set_player_info(uuid: str, player_info: dict) -> None:
+def set_player_info(player_file: nbt.NBTFile, player_info: dict) -> nbt.NBTFile:
     """
     Set the health, hunger, and dimension of a player.
     
-    :param uuid:
-    :param player_info:
-    :return: None
+    :param player_file: The player file
+    :param player_info: The player information
+    :return nbt.NBTFile: The player file with the updated information
     """
-
-    player_file = nbt.NBTFile(f'.{subdirectory}data{subdirectory}players{subdirectory}{uuid}.dat', "rb")
 
     player_file['Health'].value = float(player_info['health'])
     player_file['foodLevel'].value = int(player_info['hunger'])
     player_file['Dimension'].value = str(player_info['dimension'])
     player_file['playerGameType'].value = int(player_info['gamemode'])
 
-    player_file.write_file(f'.{subdirectory}data{subdirectory}players{subdirectory}{uuid}.dat')
+    return player_file
 
 
-def get_position(uuid: str) -> dict:
+def get_position(player_file: nbt.NBTFile) -> dict:
     """
     Get the position of a player.
     
-    :param uuid:
-    :return: dict
+    :param player_file: The player file
+    :return dict: The position of the player
     """
 
-    player_file = nbt.NBTFile(f'.{subdirectory}data{subdirectory}players{subdirectory}{uuid}.dat', "rb")
     coord_directions: tuple = ('x', 'y', 'z')
     position: dict = {}
 
@@ -102,33 +62,31 @@ def get_position(uuid: str) -> dict:
     return position
 
 
-def set_position(uuid: str, position: dict) -> None:
+def set_position(player_file: nbt.NBTFile, position: dict) -> nbt.NBTFile:
     """
     Set the position of a player.
     
-    :param uuid:
-    :param position:
-    :return: None
+    :param player_file: The player file
+    :param position: The position of the player
+    :return nbt.NBTFile: The player file with the updated position
     """
 
-    player_file = nbt.NBTFile(f'.{subdirectory}data{subdirectory}players{subdirectory}{uuid}.dat', "rb")
     coord_directions: tuple = ('x', 'y', 'z')
 
     for i in range(0, 3):
         player_file['Pos'][i].value = float(position[coord_directions[i]])
 
-    player_file.write_file(f'.{subdirectory}data{subdirectory}players{subdirectory}{uuid}.dat')
+    return player_file
 
 
-def get_inventory(uuid: str) -> list:
+def get_inventory(player_file: nbt.NBTFile) -> list:
     """
     Get the inventory of a player.
 
-    :param uuid:
-    :return: list
+    :param player_file: The player file
+    :return list: The inventory of the player
     """
 
-    player_file = nbt.NBTFile(f'.{subdirectory}data{subdirectory}players{subdirectory}{uuid}.dat', "rb")
     inventory: list = []
     
     for slot in range(len(player_file['Inventory'].tags)):
@@ -151,20 +109,17 @@ def get_inventory(uuid: str) -> list:
     return inventory
 
 
-def set_inventory(uuid: str, inventory: list) -> None:
+def set_inventory(player_file: nbt.NBTFile, inventory: list) -> nbt.NBTFile:
     """
     Set the inventory of a player.
 
-    :param uuid:
-    :param inventory:
-    :return: None
+    :param player_file: The player file
+    :param inventory: The inventory of the player
+    :return nbt.NBTFile: The player file with the updated inventory
     """
-
-    player_file = nbt.NBTFile(f'.{subdirectory}data{subdirectory}players{subdirectory}{uuid}.dat', "rb")
 
 
     player_file['Inventory'].clear()
-
 
     for item in inventory:
         if item['count'] == '':
@@ -183,38 +138,47 @@ def set_inventory(uuid: str, inventory: list) -> None:
 
         player_file['Inventory'].tags.append(item_tag)
 
+    return player_file
 
-    player_file.write_file(f'.{subdirectory}data{subdirectory}players{subdirectory}{uuid}.dat')
 
-
-def gui(users: list, uuids: list, server: ftplib.FTP, properties: list) -> None:
+def gui(users: list, uuids: list, server: ftplib.FTP, properties: list, directory: str, offline: bool) -> None:
     global subdirectory, ip, port
+
     """
     The GUI for the application.
 
-    :param users:
-    :param uuids:
-    :param server:
-    :return: None
+    :param users: The list of users
+    :param uuids: The list of UUIDs
+    :param server: The server to connect to
+    :return None:
     """
 
     server_info: dict = {}
-    for line in properties:
-        if 'query.port' in line:
-            server_info['port'] = int(line.split('=')[1])
-        
-        if 'level-name' in line:
-            server_info['world'] = line.split('=')[1]
+
+    if not offline:
+        for line in properties:
+            if 'query.port' in line:
+                server_info['port'] = int(line.split('=')[1])
+            
+            if 'level-name' in line:
+                server_info['world'] = line.split('=')[1]
     
+        minecraft_server = mcstatus.JavaServer.lookup(ip, port)
 
-    minecraft_server = mcstatus.JavaServer.lookup(ip, port)
+        online_players: int = 0
+        max_players: int = 0
 
-    online_players: int = 0
-    max_players: int = 0
+        if minecraft_server is not None:
+            online_players: int = minecraft_server.status().players.online
+            max_players: int = minecraft_server.status().players.max
+    else:
+        server_info['port'] = 0
+        server_info['world'] = 'NO SERVER WORLD'
 
-    if minecraft_server is not None:
-        online_players: int = minecraft_server.status().players.online
-        max_players: int = minecraft_server.status().players.max
+        minecraft_server = None
+
+        online_players: int = 0
+        max_players: int = 0
     
         
     default_layout = [
@@ -243,6 +207,8 @@ def gui(users: list, uuids: list, server: ftplib.FTP, properties: list) -> None:
 
     window = sg.Window('Editor', default_layout, resizable=True)
 
+    player_file = None
+
     while True:
         special_items: tuple = (103, 102, 101, 100, -106)
         event, values = window.read()
@@ -255,16 +221,21 @@ def gui(users: list, uuids: list, server: ftplib.FTP, properties: list) -> None:
                 current_player = uuids[users.index(values['_USER_INPUT_'])]
             
                 print(f"Retrieving player data for {current_player}...")
-                try:
-                    server.retrbinary(f'RETR /world/playerdata/{current_player}.dat', open(f'data{subdirectory}players{subdirectory}{current_player}.dat', 'wb').write)
-                    print("Player data retrieved successfully.")
-                except Exception as e:
-                    print(f"Failed to retrieve player data: {str(e)}")
-                    continue
+                if not offline:
+                    try:
+                        server.retrbinary(f'RETR /world/playerdata/{current_player}.dat', open(f'data{subdirectory}players{subdirectory}{current_player}.dat', 'wb').write)
+                        print("Player data retrieved successfully.")
+                    except Exception as e:
+                        print(f"Failed to retrieve player data: {str(e)}")
+                        continue
+                else:
+                    print("Player data already loaded.")
+
+                player_file = nbt.NBTFile(f'{directory}{subdirectory}data{subdirectory}players{subdirectory}{current_player}.dat', "rb")
                 
-                position: dict = get_position(current_player)
-                inventory: list = get_inventory(current_player)
-                player_info: dict = get_player_info(current_player)
+                position: dict = get_position(player_file)
+                inventory: list = get_inventory(player_file)
+                player_info: dict = get_player_info(player_file)
 
                 window['_HEALTH_'].update(value=player_info['health'])
                 window['_HUNGER_'].update(value=player_info['hunger'])
@@ -291,7 +262,8 @@ def gui(users: list, uuids: list, server: ftplib.FTP, properties: list) -> None:
                     except:
                         print(item, item["slot"])
                 
-                minecraft_server = mcstatus.JavaServer.lookup(ip, port)
+                if not offline:
+                    minecraft_server = mcstatus.JavaServer.lookup(ip, port)
 
                 online_players: int = 0
                 max_players: int = 0
@@ -305,6 +277,10 @@ def gui(users: list, uuids: list, server: ftplib.FTP, properties: list) -> None:
                 window.refresh()
             
             case 'save':
+                if player_file is None:
+                    print("No player data loaded.")
+                    continue
+
                 current_player = uuids[users.index(values['_USER_INPUT_'])]
 
                 new_inventory: list = []
@@ -322,21 +298,28 @@ def gui(users: list, uuids: list, server: ftplib.FTP, properties: list) -> None:
                 for item in special_items:
                     new_inventory.append({'count': values[f'_COUNT_{item}_'], 'item': values[f'_ITEM_{item}_'], 'slot': item})
 
-                set_player_info(current_player, {'health': values['_HEALTH_'], 'hunger': values['_HUNGER_'], 'dimension': values['_DIMENSION_'], 'gamemode': values['_GAMEMODE_']})
-                set_position(current_player, {'x': values['_X_'], 'y': values['_Y_'], 'z': values['_Z_']})
-                set_inventory(current_player, new_inventory)
+                player_file = set_player_info(player_file, {'health': values['_HEALTH_'], 'hunger': values['_HUNGER_'], 'dimension': values['_DIMENSION_'], 'gamemode': values['_GAMEMODE_']})
+                player_file = set_position(player_file, {'x': values['_X_'], 'y': values['_Y_'], 'z': values['_Z_']})
+                player_file = set_inventory(player_file, new_inventory)
+
+                player_file.write_file(f'.{subdirectory}data{subdirectory}players{subdirectory}{current_player}.dat')
+
+                print(f"Player data for {current_player} saved.")
             
             case 'upload':
                 current_player = uuids[users.index(values['_USER_INPUT_'])]
 
                 print(f"Uploading player data for {current_player}...")
+
+                if offline:
+                    print("Cannot upload player data in offline mode.")
+                    continue
+                
                 try:
                     server.storbinary(f"STOR /world/playerdata/{current_player}.dat", open(f'data{subdirectory}players{subdirectory}{current_player}.dat', 'rb'))
                     print("Player data uploaded successfully.")
                 except Exception as e:
                     print(f"Failed to upload player data: {str(e)}")
-                    continue
-
     window.close()
 
 
@@ -344,9 +327,9 @@ def get_file(server: ftplib.FTP, filename: str) -> str:
     """
     Get a file from the server.
     
-    :param server:
-    :param filename:
-    :return: str
+    :param server: The server to retrieve the file from
+    :param filename: The name of the file to retrieve
+    :return str: The file's data
     """
 
     file = io.BytesIO()
@@ -355,14 +338,70 @@ def get_file(server: ftplib.FTP, filename: str) -> str:
     return file.getvalue().decode('utf-8')
 
 
-def main() -> None:
+def build_local_user_cache(player_folder: str, minecraft_api: str) -> dict:
+    """
+    Build a local user cache from the player folder.
+    
+    :param player_folder: The folder containing the player data
+    :param minecraft_api: The API to retrieve player data
+    :return dict: The user cache generated from the player folder
+    """
+
+    usercache_data: dict = {}
+    network_connection: bool = False
+
+    #Check for internet connection
+    try:
+        requests.get('https://www.google.com')
+        network_connection = True
+    except:
+        print("No internet connection. Attempting to continue offline")
+
+
+    for player in os.listdir(player_folder):
+        current_player = player.replace('.dat', '')
+
+        if not network_connection:
+            usercache_data[current_player] = current_player
+            continue
+
+        print(f"Retrieving player name for {current_player}...")
+        player_data = requests.get(minecraft_api.format(uuid=current_player.replace('-', ''))).json()
+
+        if player_data['code'] == 'player.found':
+            usercache_data[current_player] = player_data['data']['player']['username']
+            
+        elif player_data['code'] == 'minecraft.api_failure':
+            print(f"Failed to retrieve player name for {current_player}.")
+            usercache_data[current_player] = current_player
+    
+    return usercache_data
+
+
+def main(minecraft_api: str, ip: str, port: int, username: str, password: str, directory: str, offline: bool) -> None:
     """
     The main function of the application.
-    
-    :return: None
+
+    :param minecraft_api: The API to retrieve player data
+    :param ip: The IP of the server
+    :param port: The port of the server
+    :param username: The username for server login
+    :param password: The password for server login
+    :param directory: The directory to save the player data
+    :param offline: Run the program in offline mode
+    :return None:
     """
 
     server: ftplib.FTP = ftplib.FTP()
+
+    if offline:
+        usercache_data = build_local_user_cache(f'{directory}{subdirectory}data{subdirectory}players', minecraft_api)
+
+        uuids: list = list(usercache_data.keys())
+        user_list: list = list(usercache_data.values())
+
+        gui(user_list, uuids, server, [], directory, offline)
+        sys.exit()
     
     while True:
         try:
@@ -391,11 +430,59 @@ def main() -> None:
     uuids: list = list(usercache_data.keys())
     user_list: list = list(usercache_data.values())
 
-    gui(user_list, uuids, server, properties_data)
+    gui(user_list, uuids, server, properties_data, directory, offline)
 
 
 if __name__ == '__main__':
-    args = parse_args()
+    parser = argparse.ArgumentParser(description="Offline Minecraft Save Editor")
+    parser.add_argument("-o", "--offline", help="Run the program in offline mode", action="store_true", required=False)
+    parser.add_argument("-dir", "--directory", help="The directory to save the player data", type=str, required=False)
+
+    #Server arguments
+    parser.add_argument("-m", "--minecraft_api", help="The API to retrieve player data", type=str, required=False)
+    parser.add_argument("-i", "--ip", help="The IP of the server", type=str, required=False)
+    parser.add_argument("-p", "--port", help="The port of the server", type=int, required=False)
+    parser.add_argument("-u", "--username", help="The username for server login", type=str, required=False)
+    parser.add_argument("-pw", "--password", help="The password for server login", type=str, required=False)
+    
+    args = parser.parse_args()
+
+    directory: str = '.'
+    subdirectory: str = os.sep
+
+    if args.directory:
+        directory = args.directory
+
+    if not os.path.exists(f'{directory}{subdirectory}data{subdirectory}settings.json'):
+        settings: dict = {
+            "minecraft_api" : "https://playerdb.co/api/player/minecraft/{uuid}",
+            "username": "admin",
+            "password": "password",
+            "ip": "localhost",
+            "port": 21
+        }
+
+        if not os.path.exists(f'{directory}{subdirectory}data'):
+            os.mkdir(f'{directory}{subdirectory}data')
+
+        json.dump(settings, open(f'{directory}{subdirectory}data{subdirectory}settings.json', 'w'))
+        print("Settings file not found. Creating new settings file with default values.")
+
+        if not args.offline:
+            input("Please edit the settings file and restart the program. \nPress enter to exit.")
+            sys.exit()
+
+    if not os.path.exists(f'{directory}{subdirectory}data{subdirectory}players'):
+        os.mkdir(f'{directory}{subdirectory}data{subdirectory}players')
+
+
+    settings: dict = json.load(open(f'{directory}{subdirectory}data{subdirectory}settings.json', 'r'))
+
+    minecraft_api: str =  settings.get('minecraft_api', 'https://playerdb.co/api/player/minecraft/{uuid}')
+    ip: str = settings.get('ip')
+    port: int = settings.get('port')
+    username: str = settings.get('username')
+    password: str = settings.get('password')
 
     if args.ip:
         ip = args.ip
@@ -406,4 +493,4 @@ if __name__ == '__main__':
     if args.password:
         password = args.password
 
-    main()
+    main(minecraft_api, ip, port, username, password, directory, args.offline,)
