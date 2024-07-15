@@ -508,6 +508,10 @@ if __name__ == '__main__':
     if args.add:
         print(f"Copying player data from {args.add} to the player folder.")
 
+        if not os.path.exists(args.add):
+            print(f"File {args.add} not found.")
+            sys.exit()
+
         try:
             shutil.copyfile(args.add, f'{player_folder}{subdirectory}{args.load.add(os.sep)[-1]}')
         except Exception as error:
