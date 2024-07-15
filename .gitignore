@@ -8,3 +8,7 @@ src/build/
 src/dist/
 src/OMSE src.zip
 src/test.py
+main.spec
+build/
+dist/
+OMSE.spec

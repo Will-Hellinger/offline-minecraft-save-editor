@@ -21,7 +21,7 @@ If you need to modify local files launch the application with the -o argument.
 
 ## "Compiling"
 
-To compile the project, have pyinstaller installed, be in the src directory, then use the following pyinstaller command: `pyinstaller --add-data "default_settings.json;." -c -F main.py`
+To compile the project, you must have pyinstaller installed, be in the base directory, then use the following pyinstaller command: `pyinstaller --add-data "./src/default_settings.json;." --add-data "LICENSE;." -c -F -n OMSE ./src/main.py`
 
 ## Contributing
 
