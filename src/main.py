@@ -3,6 +3,7 @@ import io
 import sys
 import json
 import ftplib
+import shutil
 import requests
 import argparse
 import mcstatus
@@ -447,38 +448,45 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
 
+    #For PyInstaller
+    compiled = False
+
+    if hasattr(sys, '_MEIPASS'):
+        compiled = True
+
     directory: str = '.'
     subdirectory: str = os.sep
 
     if args.directory:
         directory = args.directory
 
-    if not os.path.exists(f'{directory}{subdirectory}data{subdirectory}settings.json'):
-        settings: dict = {
-            "minecraft_api" : "https://playerdb.co/api/player/minecraft/{uuid}",
-            "username": "admin",
-            "password": "password",
-            "ip": "localhost",
-            "port": 21
-        }
+    data_folder = f'{directory}{subdirectory}data'
+    player_folder = f'{data_folder}{subdirectory}players'
+    settings_file = f'{data_folder}{subdirectory}settings.json'
 
-        if not os.path.exists(f'{directory}{subdirectory}data'):
-            os.mkdir(f'{directory}{subdirectory}data')
+    if not os.path.exists(settings_file):
+        if not os.path.exists(data_folder):
+            os.mkdir(data_folder)
 
-        json.dump(settings, open(f'{directory}{subdirectory}data{subdirectory}settings.json', 'w'))
+        settings_location = 'default_settings.json'
+        if compiled:
+            settings_location = os.path.join(sys._MEIPASS, 'default_settings.json')
+
+        shutil.copy(settings_location, settings_file)
+
         print("Settings file not found. Creating new settings file with default values.")
 
         if not args.offline:
             input("Please edit the settings file and restart the program. \nPress enter to exit.")
             sys.exit()
 
-    if not os.path.exists(f'{directory}{subdirectory}data{subdirectory}players'):
-        os.mkdir(f'{directory}{subdirectory}data{subdirectory}players')
+    if not os.path.exists(player_folder):
+        os.mkdir(player_folder)
 
-
-    settings: dict = json.load(open(f'{directory}{subdirectory}data{subdirectory}settings.json', 'r'))
+    settings: dict = json.load(open(settings_file, 'r'))
 
     minecraft_api: str =  settings.get('minecraft_api', 'https://playerdb.co/api/player/minecraft/{uuid}')
+    offline: bool = settings.get('start_in_offline_mode')
     ip: str = settings.get('ip')
     port: int = settings.get('port')
     username: str = settings.get('username')
@@ -492,5 +500,7 @@ if __name__ == '__main__':
         username = args.username
     if args.password:
         password = args.password
+    if args.offline:
+        offline = args.offline
 
-    main(minecraft_api, ip, port, username, password, directory, args.offline,)
+    main(minecraft_api, ip, port, username, password, directory, offline)

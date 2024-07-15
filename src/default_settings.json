@@ -1,0 +1,8 @@
+{
+    "minecraft_api" : "https://playerdb.co/api/player/minecraft/{uuid}",
+    "start_in_offline_mode": false,
+    "username": "admin",
+    "password": "password",
+    "ip": "localhost",
+    "port": 21
+}

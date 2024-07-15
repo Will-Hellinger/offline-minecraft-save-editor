@@ -19,6 +19,10 @@ To get started with Offline Minecraft Server Editor, follow these steps:
 
 If you need to modify local files launch the application with the -o argument.
 
+## "Compiling"
+
+To compile the project, have pyinstaller installed, be in the src directory, then use the following pyinstaller command: `pyinstaller --add-data "default_settings.json;." -c -F main.py`
+
 ## Contributing
 
 Contributions are welcome! If you have any suggestions, bug reports, or feature requests, please open an issue on the repo.

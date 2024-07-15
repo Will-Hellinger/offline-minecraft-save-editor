@@ -1,3 +1,5 @@
 mcstatus==11.1.1
 NBT==1.5.1
-PySimpleGUI==5.0.2
+PySimpleGUI==4.60.5
+PySimpleGUI==5.0.6
+Requests==2.32.3
