@@ -436,7 +436,10 @@ def main(minecraft_api: str, ip: str, port: int, username: str, password: str, d
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Offline Minecraft Save Editor")
+
+    #Local arguments
     parser.add_argument("-o", "--offline", help="Run the program in offline mode", action="store_true", required=False)
+    parser.add_argument("-a", "--add", help="Add a player data file to the player folder", type=str, required=False)
     parser.add_argument("-dir", "--directory", help="The directory to save the player data", type=str, required=False)
 
     #Server arguments
@@ -450,7 +453,6 @@ if __name__ == '__main__':
 
     #For PyInstaller
     compiled = False
-
     if hasattr(sys, '_MEIPASS'):
         compiled = True
 
@@ -502,5 +504,13 @@ if __name__ == '__main__':
         password = args.password
     if args.offline:
         offline = args.offline
+    
+    if args.add:
+        print(f"Copying player data from {args.add} to the player folder.")
+
+        try:
+            shutil.copyfile(args.add, f'{player_folder}{subdirectory}{args.load.add(os.sep)[-1]}')
+        except Exception as error:
+            print(f"Failed to copy {args.add} to {player_folder} due to: {error}")
 
     main(minecraft_api, ip, port, username, password, directory, offline)
